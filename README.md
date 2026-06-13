@@ -96,6 +96,5 @@ The COSMIC-style WMDP run uses intervention-based selection to choose the refusa
 
 * Arditi et al. (2024). [Refusal in Language Models Is Mediated by a Single Direction.](https://arxiv.org/abs/2406.11717)
 * Siu et al. (2025). [COSMIC: Generalized Refusal Direction Identification in LLM Activations.](https://arxiv.org/abs/2506.00085)
-* Zhang et al. (2024). [Negative Preference Optimization: From Catastrophic Collapse to Effective Unlearning.](https://arxiv.org/abs/2404.05868)
 * TOFU: [A Task of Fictitious Unlearning for LLMs.](https://locuslab.github.io/tofu/)
 * WMDP: [The WMDP Benchmark: Measuring and Reducing Malicious Use With Unlearning.](https://www.wmdp.ai/)
