@@ -1,8 +1,8 @@
 # Unlearning Direction Evaluation
 
 This repository contains scripts used in an exploratory project investigating
-whether unlearning removes knowledge from language models or suppresses
-access to that knowledge via refusal direction.
+whether unlearning methods genuinely removes knowledge from language models or suppresses
+access to it through refusal direction.
 
 Across six WMDP-unlearned Llama-3-8B-Instruct checkpoints, ablating a rank-1
 refusal direction does not recover WMDP-Bio accuracy beyond
@@ -10,10 +10,7 @@ random-direction or matched-construction controls, even for the two models
 (ILU-RMU, GradDiff) where the same direction demonstrably bypasses refusal-like
 behavior on ordinary harmful prompts. A separate arm found that unrelated
 GSM8K fine-tuning *does* raise WMDP-Bio accuracy for most of the same models,
-gated by whether general utility (MMLU) moves alongside it. Low forget-set
-performance alone does not distinguish genuine knowledge removal from
-suppression, and a null result from one recovery probe (direction ablation)
-does not generalize to another (fine-tuning).
+gated by whether general utility (MMLU) moves alongside it.
 
 ## Results and writeups
 
@@ -45,15 +42,6 @@ themselves.
 ---
 
 ## Direction extraction and WMDP-Bio ablation
-
-> An earlier script, `wmdp_bio_refusal_direction_eval.py`, is removed from
-> this repo. It re-tokenized already-templated prompts (silently
-> double-inserting the BOS token, which also undercounted its own
-> forced-choice WMDP-Bio scoring vs. `lm_eval`), only searched the final
-> token position instead of the full post-instruction grid, and applied
-> neither Arditi et al.'s nor COSMIC's selection filters. `extract_refusal_direction.py`
-> + `wmdp_bio_lm_eval_ablation.py` (below) fix all of that -- see
-> [direction_extraction.md](direction_extraction.md) for the full rationale.
 
 **1. Extract a refusal direction.** `extract_refusal_direction.py` computes
 difference-in-means candidates over the last 5 post-instruction token
