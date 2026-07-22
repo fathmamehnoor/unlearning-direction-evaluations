@@ -3,6 +3,12 @@ datasets>=2.19.0
 numpy>=1.24.0
 pandas>=2.0.0
 protobuf>=4.25.0
+scipy>=1.11.0
 sentencepiece>=0.2.0
 torch>=2.1.0
 transformers>=4.45.0
+lm_eval>=0.4.0
+
+# wmdp_sft_recovery only (QLoRA fine-tuning)
+peft>=0.11.0
+bitsandbytes>=0.43.0

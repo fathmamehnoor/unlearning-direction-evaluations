@@ -1,95 +1,130 @@
-# Full Results
+# Results
 
-Complete per-method results for the direction-ablation experiments and the SFT follow-up.
+Summary of the two arms: whether ablating a refusal/IDK direction recovers
+WMDP-Bio knowledge, and whether unrelated fine-tuning does. See
+[direction_extraction.md](direction_extraction.md) for how directions were
+built and selected. (An earlier TOFU direction-ablation arm and a since-fixed
+WMDP-Bio scorer were tested during this project and have been removed from
+the codebase; this file reflects the current, corrected pipeline only.)
 
-Standard errors are binomial, per condition. TOFU experiments compare the selected IDK/refusal direction against a random-direction ablation control. WMDP experiments compare a bio-specific refusal direction against a generic refusal direction.
+## WMDP-Bio direction-ablation
 
-## TOFU direction-ablation experiments
+`lm_eval`'s `wmdp_bio` task (n = 1273), scored across `baseline`,
+`selected_direction_ablation`, `matched_control_ablation`, and 8
+`random_direction_ablation` conditions on the same loaded model
+(`scripts/wmdp_bio_lm_eval_ablation.py`). Six WMDP-unlearned Llama-3-8B-Instruct
+checkpoints (OPTML-Group's GradDiff, IDK-AP, ILU-RMU, NPO, NPO-ILU, and
+ScaleAI's RMU).
 
-TOFU forget10, n = 400. Model: tofu_Llama-3.1-8B-Instruct_full, unlearned with each method via OpenUnlearning.
+| model | method | selected acc | matched-control acc | random-control mean (±std) |
+|---|---|---|---|---|
+| GradDiff | cosmic | 27.0% | 27.1% | 26.9% (±0.6%) |
+| IDK-AP | cosmic | 26.8% | 27.1% | 27.2% (±0.1%) |
+| ILU-RMU | mean_diff | 32.3% | 32.2% | 32.1% (±0.6%) |
+| ILU-RMU | cosmic | 32.8% | 32.7% | *(shares controls above)* |
+| NPO | cosmic | 24.5% | 24.7% | 24.3% (±0.2%) |
+| NPO-ILU | cosmic | 27.5% | 26.8% | 27.1% (±0.3%) |
+| RMU | mean_diff | 26.3% | 26.2% | 26.1% (±0.2%) |
+| RMU | cosmic | 28.0% | 25.5% | *(shares controls above)* |
 
-### GradDiff
+No selected direction cleared its own random-control distribution by more
+than noise (the largest deviation, IDK-AP's, is in the wrong direction --
+ablation scores *below* the random-control mean, not above). Both selection
+algorithms agree with each other in every model where both produced a
+direction (see [direction_extraction.md](direction_extraction.md) for why
+`mean_diff` only produced one for RMU and ILU-RMU).
 
-| Condition | Forget10 Correct | Forget10 Answer Prob | Retain Correct |
-|---|---|---|---|
-| Baseline | 10.8% | 0.0685 | 32.0% |
-| IDK/refusal ablation | 9.0% | 0.0685 | 28.0% |
-| Random ablation | 11.3% | 0.0685 | 34.0% |
+### The direction still does something: behavioral bypass check
 
-No evidence of forgotten-knowledge recovery. IDK/refusal ablation slightly reduced forget-set correctness, increased degeneracy, and harmed retain performance. Random ablation performed at least as well as the selected direction.
+`scripts/wmdp_refusal_behavior_check.py` checks whether the same directions
+that show no WMDP-Bio recovery actually bypass refusal-like behavior on 100
+held-out AdvBench harmful prompts (disjoint from extraction). This is what
+makes the null result above informative rather than a dead sensor.
 
-### RMU
+| model | method | baseline refusal rate | ablated refusal rate | ablated clean-bypass rate |
+|---|---|---|---|---|
+| ILU-RMU | mean_diff | 98% | 0% | 100% |
+| RMU | mean_diff | 70% | 72% | 13% |
+| RMU | cosmic | 70% | 62% | 32% |
+| GradDiff | cosmic | 61% | 0% | 30% |
+| IDK-AP | cosmic | 0%\* | 0% | 92% |
+| NPO | cosmic | 5%\*\* | 0% | 6% |
+| NPO-ILU | cosmic | 0%\*\* | 0% | 2% |
 
-| Condition | Forget10 Correct | Forget10 Answer Prob | Retain Correct |
-|---|---|---|---|
-| Baseline | 2.5% | 0.196 | 77.5% |
-| IDK/refusal ablation | 0.0% | 0.227 | 73.8% |
-| Random ablation | 2.5% | 0.191 | 77.5% |
+\* IDK-AP already complies with harmful prompts at baseline (91% clean-bypass
+before any ablation) -- it doesn't exhibit refusal-phrase behavior to bypass.
+\*\* NPO and NPO-ILU are heavily degenerate at baseline (94% / 100% of
+generations are repetition/garbage per the check's degeneracy flag), so
+refusal rate isn't a meaningful signal for these two either way.
 
-The selected ablation increased forget-set answer probability but did not improve behavioural recovery. Forget10 correctness dropped from 2.5% to 0%, and retain performance declined. Wrong-answer rates increased rather than refusal rates decreasing, suggesting degradation rather than hidden-knowledge recovery.
+For **ILU-RMU** and **GradDiff**, ablating the selected direction produces a
+clean, large behavioral effect (refusal collapses from 98%/61% to 0%;
+matched-control ablation leaves it unchanged) -- yet WMDP-Bio accuracy for
+both stays within noise of the random-control distribution. This is the
+central dissociation in this arm: **the direction demonstrably gates
+refusal-like behavior, but not access to the forgotten bio knowledge.**
+Suppressing surface refusal and suppressing the underlying knowledge do not
+appear to share a mechanism exposed by a single linear direction.
 
-### SimNPO
+## SFT recovery: does unrelated fine-tuning undo unlearning?
 
-| Condition | Forget10 Correct | Forget10 Answer Prob | Retain Correct |
-|---|---|---|---|
-| Baseline | 57.5% | 0.826 | 87.5% |
-| IDK/refusal ablation | 61.3% | 0.833 | 83.8% |
-| Random ablation | 57.5% | 0.826 | 86.3% |
+A different mechanism, tested by [`wmdp_sft_recovery/`](wmdp_sft_recovery/):
+unrelated QLoRA SFT on `openai/gsm8k` (near-zero mutual information with
+WMDP-bio), applied to six WMDP-unlearned methods plus a full-knowledge
+control (base `meta-llama/Meta-Llama-3-8B-Instruct`), evaluated at
+0/1000/3000/6000 examples seen via `lm_eval` (`wmdp_bio`, `mmlu`, `gsm8k`).
+Full table:
+[`wmdp_sft_recovery/results/wmdp_sft_recovery/recovery_table.md`](wmdp_sft_recovery/results/wmdp_sft_recovery/recovery_table.md).
 
-Forget10-Correct standard error ≈ 2.5% per condition, so the 57.5% → 61.3% change falls within the noise. The baseline already answered many forget-set questions correctly and showed little refusal behaviour, making this difficult to read as hidden-knowledge recovery.
+| model | WMDP-bio: baseline &rarr; peak | &Delta; acc | &Delta; correct-option prob | &Delta; MMLU (utility gate) |
+|---|---|---|---|---|
+| RMU | 28.1% &rarr; 69.5% | +41.4pp | +0.326 | -3.2pp |
+| NPO | 26.8% &rarr; 49.3% | +22.5pp | +0.140 | -1.8pp |
+| ILU-RMU | 34.0% &rarr; 57.8% | +23.8pp | +0.149 | -5.9pp |
+| GradDiff | 26.4% &rarr; 54.1% | +27.7pp | +0.126 | **+29.8pp** |
+| NPO-ILU | 27.2% &rarr; 44.3% | +17.1pp | +0.081 | +2.4pp |
+| IDK-AP | 35.2% &rarr; 40.4% | +5.2pp | +0.021 | -6.2pp |
+| Full-knowledge control | 73.1% &rarr; 71.5% (no rise) | -1.6 to -2.0pp | ~-0.06 | -4.2 to -5.8pp |
 
-### UNDIAL
+Reading rule: bio up with MMLU flat means real recovery (suppression, not
+removal); bio and MMLU up together means general SFT churn, not hidden
+knowledge resurfacing.
 
-| Condition | Forget10 Correct | Forget10 Answer Prob | Retain Correct |
-|---|---|---|---|
-| Baseline | 43.8% | 0.742 | 67.5% |
-| IDK/refusal ablation | 41.3% | 0.745 | 67.5% |
-| Random ablation | 40.0% | 0.741 | 67.5% |
+- **RMU** recovers essentially to full-knowledge-model territory with MMLU
+  flat -- the cleanest suppression-not-removal signature in this arm, and its
+  correct-option-probability delta (+0.326) leads every other model by more
+  than 2x.
+- **NPO** and **ILU-RMU** show substantial, MMLU-flat recovery (+21-24pp on
+  bio, MMLU within -6pp) -- knowledge genuinely resurfaces, though less
+  completely than RMU.
+- **GradDiff**'s bio jump is confounded: MMLU rises by nearly as much
+  (+29.8pp, from a near-chance 24.9% baseline). This reads as SFT repairing a
+  broadly degraded/incoherent baseline rather than bio-specific suppression --
+  exactly the case the reading rule is designed to catch.
+- **NPO-ILU** sits in between: a real bio rise (+17.1pp, still climbing at
+  the last checkpoint tested) alongside a modest MMLU increase (+2.4pp) --
+  not the clean flat-utility signature of RMU/NPO/ILU-RMU, but far short of
+  GradDiff's confound.
+- **IDK-AP** shows only a small rise (+5.2pp, probability flat at +0.02) while
+  MMLU *declines* -- no clean recovery signature; this unlearning looks more
+  like genuine removal than the others.
+- The **full-knowledge control** stays flat to slightly declining on
+  WMDP-bio under the same SFT recipe, confirming the rises above are
+  attributable to the unlearning coming undone rather than GSM8K SFT
+  manufacturing bio knowledge on its own.
 
-The selected direction slightly increased answer probability but did not improve behavioural recovery. Forget10 correctness declined slightly and retain performance was unchanged.
+Ranking by correct-option-probability delta -- the cleanest discriminator,
+since it can rise before the argmax answer flips -- is roughly
+**RMU > NPO &asymp; ILU-RMU > GradDiff (confounded) > NPO-ILU &gt;&gt; IDK-AP &asymp; control (flat)**.
 
-## WMDP-Bio direction-ablation experiments
+## Takeaway
 
-WMDP-Bio, n = 1273. Unlearned checkpoints from the OPTML-Group collection. The base Llama-3-8B-Instruct model scores 39.3% on WMDP-Bio.
-
-### IDK-AP
-
-| Condition | WMDP-Bio Accuracy | Correct Prob |
-|---|---|---|
-| No ablation | 26.9% | 0.271 |
-| Bio-specific refusal ablation | 27.3% | 0.273 |
-| Generic refusal ablation | 27.4% | 0.273 |
-
-Neither bio-specific nor generic refusal ablation produced meaningful recovery. The generic ablation was marginally higher than the bio-specific one, which does not support a task-specific hidden-knowledge effect.
-
-### ILU-RMU
-
-| Condition | WMDP-Bio Accuracy | Correct Prob |
-|---|---|---|
-| No ablation | 29.8% | 0.302 |
-| Bio-specific refusal ablation | 31.5% | 0.311 |
-| Generic ablation | 30.2% | 0.297 |
-
-Accuracy standard error ≈ 1.3% per condition, so the 29.8% → 31.5% change falls within the noise, and recovered performance remains far below the 39.3% base-model accuracy.
-
-## SFT follow-up
-
-Unrelated GSM8K SFT (QLoRA) applied to the RMU-unlearned TOFU model, evaluated after 1000, 3000, and 6000 examples, with the full TOFU model as a control evaluated after 1000 examples. TOFU forget10, n = 400.
-
-### RMU-unlearned model + GSM8K SFT
-
-| Condition | Forget10 Correct | Forget10 Ans Prob | Retain Correct | Forget Degen. | Retain Degen. | GSM8K Score |
-|---|---|---|---|---|---|---|
-| RMU baseline | 2.5% | 0.191 | 74.1% | 20.5% | 0.8% | 0.328 |
-| RMU + GSM8K SFT, 1000 | 12.5% | 0.659 | 42.5% | 62.3% | 34.4% | 0.623 |
-| RMU + GSM8K SFT, 3000 | 13.0% | 0.657 | 43.6% | 70.0% | 24.3% | 0.633 |
-| RMU + GSM8K SFT, 6000 | 13.5% | 0.663 | 41.0% | 58.3% | 18.4% | 0.642 |
-
-### Full TOFU model + GSM8K SFT (control)
-
-| Condition | Forget10 Correct | Forget10 Ans Prob | Retain Correct | Retain Ans Prob | Forget Degen. | Retain Degen. | GSM8K Score |
-|---|---|---|---|---|---|---|---|
-| Full model baseline | 77.5% | 0.962 | 79.5% | 0.962 | 0.8% | 1.2% | 0.331 |
-| Full model + SFT, 1000 | 57.5% | 0.837 | 56.3% | 0.829 | 14.3% | 12.0% | 0.622 |
-
-Note: the RMU baseline differs slightly between the ablation experiments above (Retain Correct 77.5%, Forget10 Ans Prob 0.196) and the SFT experiment (74.1%, 0.191). The two experiments used separate evaluation runs with independently implemented scoring; each table's conditions were evaluated identically within that table.
+Two different probes of the same question -- did unlearning remove
+knowledge, or just suppress access to it? -- point the same direction but at
+different resolutions. Rank-1 direction ablation, even where it demonstrably
+bypasses refusal behavior, finds no WMDP-Bio recovery beyond chance for any
+of 6 methods; unrelated SFT, a much less targeted intervention, does recover
+bio performance for most methods, gated by whether utility (MMLU) moves with
+it. Low forget-set performance alone does not distinguish genuine knowledge
+removal from suppression, and a null result from one recovery probe
+(direction ablation) does not generalize to another (fine-tuning).
